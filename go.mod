@@ -1,4 +1,4 @@
-module github.com/4nkitd/rerunner
+module github.com/dagar-in/goner
 
 go 1.20
 

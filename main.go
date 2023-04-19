@@ -3,24 +3,27 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
 )
 
 func main() {
 
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Recovered in f", r)
-		}
-		main();
-	}()
 	if len(os.Args) < 2 {
 		fmt.Println("Please provide the command to run.")
 		return
 	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println(": => ", r)
+		}
+		main();
+	}()
 
 	command := os.Args[1:]
 
@@ -36,9 +39,9 @@ func main() {
 		fmt.Println("Error getting current working directory:", err)
 		return
 	}
-	err = watcher.Add(cwd)
+	err = addWatchRecursively(watcher, cwd, 10)
 	if err != nil {
-		fmt.Println("Error adding current working directory to file watcher:", err)
+		fmt.Println("Error adding current working directory and its subdirectories to file watcher:", err)
 		return
 	}
 
@@ -124,8 +127,40 @@ func runCommand(cmd *exec.Cmd) error {
 }
 
 func stopCommand(cmd *exec.Cmd) error {
+
+	defer func() {
+		panic("Restart")
+	}()
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
 	return cmd.Process.Kill()
+}
+
+func addWatchRecursively(watcher *fsnotify.Watcher, dir string, depth int) error {
+	if depth == 0 {
+		return nil
+	}
+
+	// Add watch for the directory itself
+	if err := watcher.Add(dir); err != nil {
+		return err
+	}
+
+	// Recursively add watch for subdirectories
+	fileInfos, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, fileInfo := range fileInfos {
+		if fileInfo.IsDir() {
+			subDir := filepath.Join(dir, fileInfo.Name())
+			if err := addWatchRecursively(watcher, subDir, depth-1); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
